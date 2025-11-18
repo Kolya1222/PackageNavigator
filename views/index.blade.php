@@ -29,20 +29,43 @@
                 <h5 class="mb-0"><i class="fa fa-download"></i> Установить новый пакет</h5>
             </div>
             <div class="card-body">
+                <!-- Существующая форма через Composer -->
                 <form id="installForm">
                     @csrf
                     <div class="row g-3">
                         <div class="col-md-9">
                             <input type="text" class="form-control" id="packageName" 
-                                   placeholder="vendor/package-name (например: evolution-cms/example)" required>
+                                placeholder="vendor/package-name (например: evolution-cms/example)" required>
                         </div>
                         <div class="col-md-2">
                             <input type="text" class="form-control" id="packageVersion" 
-                                   placeholder="Версия" value="*">
+                                placeholder="Версия" value="*">
                         </div>
                         <div class="col-md-1">
                             <button type="submit" class="btn btn-primary w-100" id="installBtn">
                                 <i class="fa fa-download"></i>
+                            </button>
+                        </div>
+                    </div>
+                </form>
+
+                <!-- Разделитель -->
+                <div class="text-center my-3">
+                    <span class="bg-light px-3 text-muted">ИЛИ</span>
+                </div>
+
+                <!-- Новая форма загрузки архива -->
+                <form id="uploadForm" enctype="multipart/form-data">
+                    @csrf
+                    <div class="row g-3">
+                        <div class="col-md-9">
+                            <input type="file" class="form-control" id="moduleArchive" 
+                                accept=".zip,.tar.gz" required>
+                            <div class="form-text">Поддерживаемые форматы: ZIP, TAR.GZ</div>
+                        </div>
+                        <div class="col-md-3">
+                            <button type="submit" class="btn btn-success w-100" id="uploadBtn">
+                                <i class="fa fa-upload"></i> Загрузить архив
                             </button>
                         </div>
                     </div>
@@ -219,6 +242,51 @@
         } finally {
             installBtn.disabled = false;
             installBtn.innerHTML = '<i class="fa fa-download"></i>';
+        }
+    }
+
+    // Загрузка архива
+    document.getElementById('uploadForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        await uploadModule();
+    });
+
+    async function uploadModule() {
+        const fileInput = document.getElementById('moduleArchive');
+        const uploadBtn = document.getElementById('uploadBtn');
+
+        if (!fileInput.files.length) {
+            showAlert('Пожалуйста, выберите файл архива', 'warning');
+            return;
+        }
+
+        uploadBtn.disabled = true;
+        uploadBtn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Загрузка...';
+
+        try {
+            const formData = new FormData();
+            formData.append('_token', getCsrfToken());
+            formData.append('archive', fileInput.files[0]);
+
+            const response = await fetch("{{ route('packagenavigator.upload') }}", {
+                method: 'POST',
+                body: formData
+            });
+
+            const result = await response.json();
+            
+            if (result.success) {
+                showAlert(`Модуль "${result.package}" успешно установлен из архива!`, 'success');
+                fileInput.value = '';
+                setTimeout(() => location.reload(), 2000);
+            } else {
+                showAlert(`Ошибка установки: ${result.error}`, 'danger');
+            }
+        } catch (error) {
+            showAlert(`Ошибка загрузки: ${error.message}`, 'danger');
+        } finally {
+            uploadBtn.disabled = false;
+            uploadBtn.innerHTML = '<i class="fa fa-upload"></i> Загрузить архив';
         }
     }
 

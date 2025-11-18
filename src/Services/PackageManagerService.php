@@ -35,6 +35,193 @@ class PackageManagerService
     }
 
     /**
+     * Установка модуля из архива
+     */
+    public function installFromArchive($archiveFile)
+    {
+        $tempDir = $this->projectRoot . '/temp/modules/' . uniqid();
+        $extractDir = $tempDir . '/extracted';
+        
+        try {
+            // Создаем временные директории
+            if (!is_dir($tempDir)) {
+                mkdir($tempDir, 0755, true);
+            }
+            if (!is_dir($extractDir)) {
+                mkdir($extractDir, 0755, true);
+            }
+
+            // Сохраняем архив
+            $archivePath = $tempDir . '/' . $archiveFile->getClientOriginalName();
+            $archiveFile->move($tempDir, $archiveFile->getClientOriginalName());
+
+            // Извлекаем архив
+            $extracted = $this->extractArchive($archivePath, $extractDir);
+            if (!$extracted) {
+                throw new \Exception('Не удалось извлечь архив');
+            }
+
+            // Ищем composer.json в извлеченных файлах
+            $composerJsonPath = $this->findComposerJson($extractDir);
+            if (!$composerJsonPath) {
+                throw new \Exception('composer.json не найден в архиве');
+            }
+
+            // Читаем информацию о пакете
+            $composerData = json_decode(file_get_contents($composerJsonPath), true);
+            $packageName = $composerData['name'] ?? null;
+            
+            if (!$packageName) {
+                throw new \Exception('Не удалось определить имя пакета');
+            }
+
+            // Копируем файлы в vendor директорию
+            $vendorPath = $this->vendorPath . '/' . $packageName;
+            $this->copyDirectory($extractDir, $vendorPath);
+
+            // Добавляем в custom/composer.json
+            $this->addToCustomComposer($packageName, '*');
+
+            // Устанавливаем через composer
+            $command = "cd \"{$this->projectRoot}\" && composer update --no-interaction";
+            $result = $this->executeCommand($command, 120);
+
+            // Очищаем временные файлы
+            $this->removeDirectory($tempDir);
+
+            return [
+                'success' => $result['success'],
+                'package' => $packageName,
+                'output' => $result['output'],
+                'error' => $result['error'] ?? ''
+            ];
+
+        } catch (\Exception $e) {
+            // Очищаем временные файлы в случае ошибки
+            if (is_dir($tempDir)) {
+                $this->removeDirectory($tempDir);
+            }
+            throw $e;
+        }
+    }
+
+    /**
+     * Извлечение архива
+     */
+    protected function extractArchive($archivePath, $extractDir)
+    {
+        $extension = pathinfo($archivePath, PATHINFO_EXTENSION);
+        
+        switch ($extension) {
+            case 'zip':
+                $zip = new \ZipArchive();
+                if ($zip->open($archivePath) === TRUE) {
+                    $zip->extractTo($extractDir);
+                    $zip->close();
+                    return true;
+                }
+                break;
+                
+            case 'tar':
+            case 'gz':
+                $phar = new \PharData($archivePath);
+                $phar->extractTo($extractDir);
+                return true;
+        }
+        
+        return false;
+    }
+
+    /**
+     * Поиск composer.json в директории
+     */
+    protected function findComposerJson($directory)
+    {
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($directory)
+        );
+        
+        foreach ($iterator as $file) {
+            if ($file->isFile() && $file->getFilename() === 'composer.json') {
+                return $file->getPathname();
+            }
+        }
+        
+        return null;
+    }
+
+    /**
+     * Рекурсивное копирование директории
+     */
+    protected function copyDirectory($source, $destination)
+    {
+        if (!is_dir($destination)) {
+            mkdir($destination, 0755, true);
+        }
+        
+        $dir = opendir($source);
+        
+        while (($file = readdir($dir)) !== false) {
+            if ($file != '.' && $file != '..') {
+                $srcFile = $source . '/' . $file;
+                $destFile = $destination . '/' . $file;
+                
+                if (is_dir($srcFile)) {
+                    $this->copyDirectory($srcFile, $destFile);
+                } else {
+                    copy($srcFile, $destFile);
+                }
+            }
+        }
+        
+        closedir($dir);
+    }
+
+    /**
+     * Рекурсивное удаление директории
+     */
+    protected function removeDirectory($directory)
+    {
+        if (!is_dir($directory)) {
+            return;
+        }
+        
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($directory, \RecursiveDirectoryIterator::SKIP_DOTS),
+            \RecursiveIteratorIterator::CHILD_FIRST
+        );
+        
+        foreach ($iterator as $item) {
+            if ($item->isDir()) {
+                rmdir($item->getPathname());
+            } else {
+                unlink($item->getPathname());
+            }
+        }
+        
+        rmdir($directory);
+    }
+
+    /**
+     * Добавление пакета в custom/composer.json
+     */
+    protected function addToCustomComposer($package, $version)
+    {
+        if (file_exists($this->customComposerPath)) {
+            $composerData = json_decode(file_get_contents($this->customComposerPath), true);
+        } else {
+            $composerData = ['require' => []];
+        }
+        
+        $composerData['require'][$package] = $version;
+        
+        file_put_contents(
+            $this->customComposerPath, 
+            json_encode($composerData, JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT)
+        );
+    }
+
+    /**
      * Удаление пакета с очисткой провайдеров
      */
     public function removePackage($package)

@@ -41,6 +41,49 @@ class Module
         return response()->json($result);
     }
 
+    /**
+     * Загрузка и установка модуля из архива
+     */
+    public function uploadModule(Request $request)
+    {
+        try {
+            if (!$request->hasFile('archive')) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Файл не загружен'
+                ]);
+            }
+
+            $file = $request->file('archive');
+            
+            // Проверка типа файла
+            $allowedMimes = ['zip', 'tar', 'tar.gz', 'rar'];
+            if (!in_array($file->getClientOriginalExtension(), $allowedMimes)) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Неподдерживаемый формат архива'
+                ]);
+            }
+
+            // Проверка размера (макс 50MB)
+            if ($file->getSize() > 50 * 1024 * 1024) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Размер файла превышает 50MB'
+                ]);
+            }
+
+            $result = $this->packageService->installFromArchive($file);
+            return response()->json($result);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'error' => $e->getMessage()
+            ]);
+        }
+    }
+
     public function remove(Request $request)
     {
         $package = $request->input('package');
