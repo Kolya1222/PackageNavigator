@@ -324,7 +324,8 @@ class PackageManagerService
                 $relativePath = str_replace([$directory, '.php'], '', $file->getPathname());
                 $className = $namespace . str_replace('/', '\\', $relativePath);
                 
-                if (class_exists($className) && $this->isServiceProvider($className)) {
+                // Безопасная проверка без автозагрузки
+                if ($this->isSafeServiceProvider($className)) {
                     $providers[] = $className;
                 }
             }
@@ -334,16 +335,31 @@ class PackageManagerService
     }
 
     /**
-     * Проверяем, является ли класс ServiceProvider
+     * Безопасная проверка ServiceProvider без автозагрузки классов
      */
-    protected function isServiceProvider($className)
+    protected function isSafeServiceProvider($className)
     {
-        try {
-            $reflection = new \ReflectionClass($className);
-            return $reflection->isSubclassOf(\Illuminate\Support\ServiceProvider::class);
-        } catch (\Throwable $e) {
+        // Проверяем по имени файла и структуре
+        $classNameLower = strtolower($className);
+        
+        // Ищем типичные признаки ServiceProvider
+        if (strpos($classNameLower, 'serviceprovider') === false) {
             return false;
         }
+        
+        // Дополнительные проверки по имени класса
+        $patterns = [
+            '/serviceprovider$/i',
+            '/providers?$/i',
+        ];
+        
+        foreach ($patterns as $pattern) {
+            if (preg_match($pattern, $className)) {
+                return true;
+            }
+        }
+        
+        return false;
     }
 
     /**

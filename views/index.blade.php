@@ -1,5 +1,93 @@
 @extends('PackageNavigator::app')
+@push('styles')
+<style>
+.alert {
+    position: relative;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    border: 1px solid;
+    border-radius: 3px;
+    font-size: 13px;
+    line-height: 1.4;
+}
 
+.alert-info {
+    color: #004085;
+    background-color: #cce7ff;
+    border-color: #b3d9ff;
+}
+
+.alert-success {
+    color: #155724;
+    background-color: #d4edda;
+    border-color: #c3e6cb;
+}
+
+.alert-warning {
+    color: #856404;
+    background-color: #fff3cd;
+    border-color: #ffeaa7;
+}
+
+.alert-danger {
+    color: #721c24;
+    background-color: #f8d7da;
+    border-color: #f5c6cb;
+}
+
+.alert-dismissible {
+    padding-right: 40px;
+}
+
+.btn-close {
+    position: absolute;
+    top: 50%;
+    right: 12px;
+    transform: translateY(-50%);
+    padding: 0;
+    background: none;
+    border: 0;
+    font-size: 18px;
+    line-height: 1;
+    color: inherit;
+    opacity: 0.6;
+    cursor: pointer;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-close:hover {
+    opacity: 1;
+    background-color: rgba(0, 0, 0, 0.1);
+    border-radius: 2px;
+}
+
+.alertContainer .btn, button:not(.btn), input[type=button]:not(.btn), input[type=submit]:not(.btn) {
+    padding: 0px;
+}
+
+.btn-close::before {
+    content: "×";
+    display: block;
+    font-size: 18px;
+    line-height: 1;
+    margin-top: -1px;
+}
+
+.package-details {
+    transition: all 0.3s ease-in-out;
+    max-height: 0;
+    overflow: hidden;
+}
+
+.package-details[style*="display: block"] {
+    max-height: 500px;
+}
+</style>
+@endpush
 @section('buttons')
 <div id="actions">
     <div class="btn-group">
@@ -211,6 +299,12 @@
             return;
         }
 
+        // Проверка формата package name
+        if (!packageName.includes('/')) {
+            showAlert('Некорректный формат пакета. Используйте: vendor/package-name', 'warning');
+            return;
+        }
+
         installBtn.disabled = true;
         installBtn.innerHTML = '<i class="fa fa-spinner fa-spin"></i>';
 
@@ -310,6 +404,12 @@
             return;
         }
 
+        // Находим кнопку удаления и блокируем её
+        const removeBtn = document.querySelector(`.remove-package[data-package="${packageName}"]`);
+        const originalHtml = removeBtn.innerHTML;
+        removeBtn.innerHTML = '<i class="fa fa-spinner fa-spin"></i>';
+        removeBtn.disabled = true;
+
         try {
             const formData = new FormData();
             formData.append('_token', getCsrfToken());
@@ -331,9 +431,15 @@
                 setTimeout(() => location.reload(), 1000);
             } else {
                 showAlert(`Ошибка удаления: ${result.error}`, 'danger');
+                // Восстанавливаем кнопку при ошибке
+                removeBtn.innerHTML = originalHtml;
+                removeBtn.disabled = false;
             }
         } catch (error) {
             showAlert(`Ошибка сети: ${error.message}`, 'danger');
+            // Восстанавливаем кнопку при ошибке
+            removeBtn.innerHTML = originalHtml;
+            removeBtn.disabled = false;
         }
     }
 

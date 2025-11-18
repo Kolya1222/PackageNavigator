@@ -1,6 +1,6 @@
 {{-- Базовый шаблон --}}
 <?php include_once MODX_MANAGER_PATH . 'includes/header.inc.php' ?>
-
+@stack('styles')
 <div class="container-fluid">
     <h1><i class="fa fa-boxes"></i> Package Navigator</h1>
     
