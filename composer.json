@@ -1,0 +1,19 @@
+{
+  "name": "roilafx/packagenavigator",
+  "require": {
+
+  },
+  "autoload": {
+    "psr-4": {
+      "roilafx\\PackageNavigator\\": "src"
+    }
+  },
+  "extra": {
+    "laravel": {
+      "providers": [
+        "roilafx\\PackageNavigator\\PackageNavigatorServiceProvider"
+      ]
+
+    }
+  }
+}

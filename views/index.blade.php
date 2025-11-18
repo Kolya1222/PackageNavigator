@@ -1,0 +1,277 @@
+@extends('PackageNavigator::app')
+
+@section('buttons')
+<div id="actions">
+    <div class="btn-group">
+        <a href="javascript:;" class="btn btn-secondary" onclick="location.reload();">
+            <i class="fa fa-refresh"></i><span> Обновить</span>
+        </a>
+    </div>
+</div>
+@endsection
+
+@section('content')
+<div class="tab-page" id="tab_main">
+    <h2 class="tab">Package Navigator - Управление пакетами Evolution CMS</h2>
+    <script type="text/javascript">
+        tpModule.addTabPage(document.getElementById('tab_main'));
+    </script>
+
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+
+    <div class="container-fluid py-3">
+        <!-- System Alerts -->
+        <div id="alertContainer"></div>
+
+        <!-- Install Package Form -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fa fa-download"></i> Установить новый пакет</h5>
+            </div>
+            <div class="card-body">
+                <form id="installForm">
+                    @csrf
+                    <div class="row g-3">
+                        <div class="col-md-9">
+                            <input type="text" class="form-control" id="packageName" 
+                                   placeholder="vendor/package-name (например: evolution-cms/example)" required>
+                        </div>
+                        <div class="col-md-2">
+                            <input type="text" class="form-control" id="packageVersion" 
+                                   placeholder="Версия" value="*">
+                        </div>
+                        <div class="col-md-1">
+                            <button type="submit" class="btn btn-primary w-100" id="installBtn">
+                                <i class="fa fa-download"></i>
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Installed Packages -->
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="fa fa-list"></i> Установленные пакеты</h5>
+                <div>
+                    <span class="badge bg-primary me-2">{{ is_array($packages) ? count($packages) : 0 }} пакетов</span>
+                    <span class="text-muted small">
+                        Composer: {{ is_string($composerVersion) ? $composerVersion : 'Unknown' }}<br>
+                    </span>
+                </div>
+            </div>
+            <div class="card-body">
+                @if(!is_array($packages) || empty($packages))
+                    <div class="text-center text-muted py-4">
+                        <i class="fa fa-inbox fa-3x mb-3"></i>
+                        <p>Пакеты не установлены.</p>
+                    </div>
+                @else
+                    <div id="packagesList">
+                        @foreach($packages as $package)
+                            @if(is_array($package) && isset($package['name']) && isset($package['version']))
+                                <div class="package-item border-bottom py-3">
+                                    <div class="d-flex justify-content-between align-items-start mb-2">
+                                        <div class="flex-grow-1">
+                                            <strong class="text-primary package-name" style="cursor: pointer;" 
+                                                    data-package="{{ $package['name'] }}">
+                                                {{ $package['name'] }}
+                                                <i class="fa fa-chevron-down small"></i>
+                                            </strong>
+                                            <br>
+                                            <span class="text-muted small">
+                                                Версия: {{ $package['version'] }}
+                                            </span>
+                                        </div>
+                                        <div>
+                                            <button class="btn btn-sm btn-danger remove-package" 
+                                                    data-package="{{ $package['name'] }}"
+                                                    title="Удалить пакет">
+                                                <i class="fa fa-trash"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Детальная информация о пакете -->
+                                    <div id="details-{{ str_replace('/', '-', $package['name']) }}" class="package-details mt-2" style="display: none;">
+                                        <div class="bg-light p-3 rounded">
+                                            @if(isset($package['description']) && $package['description'])
+                                                <p><strong>Описание:</strong> {{ $package['description'] }}</p>
+                                            @endif
+                                            
+                                            @if(isset($package['providers']) && is_array($package['providers']) && count($package['providers']) > 0)
+                                                <p><strong>Service Providers:</strong></p>
+                                                <ul class="small">
+                                                    @foreach($package['providers'] as $provider)
+                                                        <li><code>{{ $provider }}</code></li>
+                                                    @endforeach
+                                                </ul>
+                                            @else
+                                                <p class="text-muted small">Service providers не найдены</p>
+                                            @endif
+                                        </div>
+                                    </div>
+                                </div>
+                            @endif
+                        @endforeach
+                    </div>
+                @endif
+            </div>
+        </div>
+    </div>
+</div>
+@endsection
+
+@push('scripts')
+<script>
+    // Функция для показа/скрытия деталей пакета
+    function togglePackageDetails(packageName, event) {
+        const detailsId = 'details-' + packageName.replace(/\//g, '-');
+        const detailsElement = document.getElementById(detailsId);
+        
+        if (!detailsElement) {
+            console.error('Element not found:', detailsId);
+            return;
+        }
+        
+        const icon = event.currentTarget.querySelector('.fa');
+        
+        if (detailsElement.style.display === 'none' || !detailsElement.style.display) {
+            detailsElement.style.display = 'block';
+            if (icon) icon.className = 'fa fa-chevron-up small';
+        } else {
+            detailsElement.style.display = 'none';
+            if (icon) icon.className = 'fa fa-chevron-down small';
+        }
+    }
+
+    // Функция для показа уведомлений
+    function showAlert(message, type = 'info') {
+        const alertContainer = document.getElementById('alertContainer');
+        const alertId = 'alert-' + Date.now();
+        const alertHtml = `
+            <div id="${alertId}" class="alert alert-${type} alert-dismissible fade show" role="alert">
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        `;
+        alertContainer.innerHTML = alertHtml;
+        
+        setTimeout(() => {
+            const alert = document.getElementById(alertId);
+            if (alert) {
+                alert.remove();
+            }
+        }, 5000);
+    }
+
+    // Получить CSRF токен
+    function getCsrfToken() {
+        return document.querySelector('meta[name="csrf-token"]')?.content || 
+               document.querySelector('input[name="_token"]')?.value;
+    }
+
+    // Установка пакета
+    document.getElementById('installForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        await installPackage();
+    });
+
+    async function installPackage() {
+        const packageName = document.getElementById('packageName').value.trim();
+        const version = document.getElementById('packageVersion').value.trim() || '*';
+        const installBtn = document.getElementById('installBtn');
+
+        if (!packageName) {
+            showAlert('Пожалуйста, введите название пакета', 'warning');
+            return;
+        }
+
+        installBtn.disabled = true;
+        installBtn.innerHTML = '<i class="fa fa-spinner fa-spin"></i>';
+
+        try {
+            const formData = new FormData();
+            formData.append('_token', getCsrfToken());
+            formData.append('package', packageName);
+            formData.append('version', version);
+
+            const response = await fetch("{{ route('packagenavigator.install') }}", {
+                method: 'POST',
+                body: formData
+            });
+
+            const result = await response.json();
+            
+            if (result.success) {
+                showAlert(`Пакет "${packageName}" успешно установлен!`, 'success');
+                document.getElementById('installForm').reset();
+                setTimeout(() => location.reload(), 2000);
+            } else {
+                showAlert(`Ошибка установки: ${result.error}`, 'danger');
+                if (result.output) {
+                    console.log('Composer output:', result.output);
+                }
+            }
+        } catch (error) {
+            showAlert(`Ошибка сети: ${error.message}`, 'danger');
+        } finally {
+            installBtn.disabled = false;
+            installBtn.innerHTML = '<i class="fa fa-download"></i>';
+        }
+    }
+
+    // Удаление пакетов
+    document.addEventListener('click', function(e) {
+        if (e.target.closest('.remove-package')) {
+            const btn = e.target.closest('.remove-package');
+            removePackage(btn.dataset.package);
+        }
+        
+        // Обработка кликов по названиям пакетов
+        if (e.target.closest('.package-name')) {
+            const packageNameElement = e.target.closest('.package-name');
+            const packageName = packageNameElement.dataset.package;
+            togglePackageDetails(packageName, e);
+        }
+    });
+
+    async function removePackage(packageName) {
+        if (!confirm(`Вы уверены, что хотите удалить пакет "${packageName}"?\n\nБудут удалены все связанные service providers.`)) {
+            return;
+        }
+
+        try {
+            const formData = new FormData();
+            formData.append('_token', getCsrfToken());
+            formData.append('package', packageName);
+
+            const response = await fetch("{{ route('packagenavigator.remove') }}", {
+                method: 'POST',
+                body: formData
+            });
+
+            const result = await response.json();
+            
+            if (result.success) {
+                let message = `Пакет "${packageName}" успешно удален!`;
+                if (result.removed_files && result.removed_files.length > 0) {
+                    message += `<br>Удаленные файлы: ${result.removed_files.join(', ')}`;
+                }
+                showAlert(message, 'success');
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                showAlert(`Ошибка удаления: ${result.error}`, 'danger');
+            }
+        } catch (error) {
+            showAlert(`Ошибка сети: ${error.message}`, 'danger');
+        }
+    }
+
+    // Инициализация
+    document.addEventListener('DOMContentLoaded', function() {
+        showAlert('Package Navigator загружен!', 'info');
+    });
+</script>
+@endpush
