@@ -9,4 +9,5 @@ Route::name('packagenavigator.')->group(function () {
     Route::post('/remove', [Module::class, 'remove'])->name('remove');
     Route::post('/upload', [Module::class, 'uploadModule'])->name('upload');
     Route::post('/package-info', [Module::class, 'getPackageInfo'])->name('package-info');
+    Route::post('/install-remote', [Module::class, 'installRemotePackage'])->name('install-remote');
 });

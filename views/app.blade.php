@@ -1,4 +1,3 @@
-{{-- Базовый шаблон --}}
 <?php include_once MODX_MANAGER_PATH . 'includes/header.inc.php' ?>
 @stack('styles')
 <div class="container-fluid">
