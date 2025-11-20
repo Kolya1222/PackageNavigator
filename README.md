@@ -4,3 +4,7 @@
 ```
 php artisan package:installrequire roilafx/packagenavigator "*"
 ```
+2. Публикация стилей и скриптов
+```
+php artisan vendor:publish --provider="roilafx\PackageNavigator\PackageNavigatorServiceProvider"
+```
