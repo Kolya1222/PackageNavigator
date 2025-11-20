@@ -19,6 +19,9 @@ class PackageNavigatorServiceProvider extends ServiceProvider
             __DIR__ . '/../routes/inner_routes.php',
             'fa fa-boxes'
         );
+        $this->publishes([
+            __DIR__ . '/../publishable/assets'  => MODX_BASE_PATH . 'assets',
+        ]);
     }
 
     public function boot()
