@@ -127,10 +127,10 @@
                                         </span>
                                     </div>
                                     <div class="d-flex gap-2">
-                                        <button class="btn btn-sm btn-outline-secondary" 
-                                                onclick="document.getElementById('packageName').value = '{{ $package['name'] }}'"
-                                                title="Использовать для обновления">
-                                            <i class="fas fa-redo"></i>
+                                        <button class="btn btn-sm btn-outline-primary update-package" 
+                                                data-package="{{ $package['name'] }}"
+                                                title="Обновить пакет">
+                                            <i class="fas fa-sync-alt"></i>
                                         </button>
                                         <button class="btn btn-sm btn-danger remove-package" 
                                                 data-package="{{ $package['name'] }}"
@@ -169,9 +169,14 @@
 </div>
 
 <script>
-// Local form handlers for installed packages
+/**
+ * Локальные обработчики форм для установленных пакетов
+ * @namespace InstalledPackagesHandlers
+ */
 document.addEventListener('DOMContentLoaded', function() {
-    // Composer install form
+    /**
+     * Обработчик формы установки через Composer
+     */
     const installForm = document.getElementById('installForm');
     if (installForm) {
         installForm.addEventListener('submit', async function(e) {
@@ -184,7 +189,9 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Archive upload form
+    /**
+     * Обработчик формы загрузки архива
+     */
     const uploadForm = document.getElementById('uploadForm');
     if (uploadForm) {
         uploadForm.addEventListener('submit', async function(e) {
@@ -192,11 +199,13 @@ document.addEventListener('DOMContentLoaded', function() {
             const fileInput = document.getElementById('moduleArchive');
             const uploadBtn = document.getElementById('uploadBtn');
 
+            // Проверяем наличие выбранного файла
             if (!fileInput.files.length) {
                 PackageNavigator.showAlert('Пожалуйста, выберите файл архива', 'warning');
                 return;
             }
 
+            // Показываем состояние загрузки
             uploadBtn.disabled = true;
             uploadBtn.innerHTML = '<span class="loading-spinner me-2"></span>Загрузка...';
 
@@ -204,8 +213,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 const formData = new FormData();
                 formData.append('_token', PackageNavigator.getCsrfToken());
                 formData.append('archive', fileInput.files[0]);
-                // Убираем auto_extract - логика должна быть на сервере
-
+                // Выполняем запрос на загрузку архива
                 const response = await fetch("{{ route('packagenavigator.upload') }}", {
                     method: 'POST',
                     body: formData
@@ -230,66 +238,3 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 </script>
-
-<style>
-    .package-card {
-        border: none;
-        border-radius: 12px;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-        transition: all 0.3s ease;
-    }
-
-    .package-card:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-    }
-
-    .btn-modern {
-        border-radius: 8px;
-        padding: 0.75rem 1.5rem;
-        font-weight: 500;
-        transition: all 0.3s ease;
-        border: none;
-    }
-
-    .package-item {
-        border-left: 3px solid transparent;
-        transition: all 0.3s ease;
-        padding-left: 1rem;
-        margin-left: -1rem;
-        border-radius: 8px;
-    }
-
-    .package-item:hover {
-        border-left-color: #667eea;
-        background-color: #f8f9fa;
-    }
-
-    .package-details {
-        transition: all 0.3s ease-in-out;
-        max-height: 0;
-        overflow: hidden;
-    }
-
-    .package-details[style*="display: block"] {
-        max-height: 500px;
-    }
-
-    .form-control:focus {
-        border-color: #667eea;
-        box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
-    }
-
-    .bg-opacity-10 {
-        background-color: rgba(var(--bs-primary-rgb), 0.1) !important;
-    }
-
-    .fade-in {
-        animation: fadeIn 0.5s ease-in;
-    }
-
-    @keyframes fadeIn {
-        from { opacity: 0; transform: translateY(-10px); }
-        to { opacity: 1; transform: translateY(0); }
-    }
-</style>

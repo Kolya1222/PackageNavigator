@@ -4,17 +4,47 @@ namespace roilafx\PackageNavigator\Controllers;
 
 use roilafx\PackageNavigator\Services\PackageManagerService;
 use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
+use Exception;
 
+/**
+ * Контроллер навигатора пакетов
+ * 
+ * Предоставляет веб-интерфейс для управления пакетами Evolution CMS,
+ * включая установку из удаленного репозитория, загрузку архивов и удаление пакетов.
+ * 
+ * @package roilafx\PackageNavigator\Controllers
+ */
 class Module
 {
+    /**
+     * @var PackageManagerService Сервис управления пакетами
+     */
     protected $packageService;
+    
+    /**
+     * @var string URL удаленного репозитория со списком пакетов
+     */
     protected $remoteRepositoryUrl = 'https://raw.githubusercontent.com/Kolya1222/evolution-cms-extensions/main/packages.json';
 
+    /**
+     * Конструктор
+     * 
+     * Инициализирует сервис управления пакетами с экземпляром Evolution CMS
+     */
     public function __construct()
     {
         $this->packageService = new PackageManagerService(evolutionCMS());
     }
 
+    /**
+     * Отображение главного интерфейса управления пакетами
+     * 
+     * Показывает установленные пакеты, доступные удаленные пакеты и данные
+     * для фильтров интерфейса навигатора пакетов.
+     * 
+     * @return \Illuminate\Contracts\View\View
+     */
     public function index()
     {
         $installedPackages = $this->packageService->getInstalledPackages();
@@ -30,6 +60,15 @@ class Module
         ] + $filterData);
     }
 
+    /**
+     * Подготовка данных для фильтров из списка пакетов
+     * 
+     * Извлекает категории, теги и типы из данных пакетов для фильтрации
+     * и генерирует счетчики для каждой опции фильтра.
+     * 
+     * @param array $packages Массив данных пакетов
+     * @return array Данные фильтров включая категории, теги, типы и их счетчики
+     */
     private function prepareFilterData($packages)
     {
         $allCategories = [];
@@ -41,7 +80,7 @@ class Module
         $typeCounts = [];
 
         foreach ($packages as $package) {
-            // Категории
+            // Обработка категорий
             if (isset($package['categories']) && is_array($package['categories'])) {
                 foreach ($package['categories'] as $category) {
                     $allCategories[] = $category;
@@ -49,7 +88,7 @@ class Module
                 }
             }
             
-            // Теги
+            // Обработка тегов
             if (isset($package['tags']) && is_array($package['tags'])) {
                 foreach ($package['tags'] as $tag) {
                     $allTags[] = $tag;
@@ -57,7 +96,7 @@ class Module
                 }
             }
             
-            // Типы
+            // Обработка типов
             if (isset($package['type'])) {
                 $types = array_map('trim', explode('/', $package['type']));
                 foreach ($types as $type) {
@@ -77,16 +116,26 @@ class Module
         ];
     }
 
+    /**
+     * Получение списка пакетов из удаленного репозитория
+     * 
+     * Загружает список пакетов из удаленного репозитория с поддержкой кэширования.
+     * Обрабатывает различные ошибки и возвращает пустой массив при неудаче.
+     * 
+     * @return array Список удаленных пакетов или пустой массив при ошибке
+     */
     public function getRemotePackages()
     {
         $cacheKey = 'remote_packages';
         $cacheTime = 3600;
 
         try {
+            // Проверяем кэш
             if (\Illuminate\Support\Facades\Cache::has($cacheKey)) {
                 return \Illuminate\Support\Facades\Cache::get($cacheKey);
             }
             
+            // Настраиваем контекст для HTTP-запроса
             $context = stream_context_create([
                 'http' => [
                     'timeout' => 10,
@@ -99,6 +148,7 @@ class Module
                 ]
             ]);
             
+            // Выполняем запрос к удаленному репозиторию
             $response = @file_get_contents($this->remoteRepositoryUrl, false, $context);
             
             if ($response === false) {
@@ -106,20 +156,24 @@ class Module
                 return [];
             }
 
+            // Проверяем, что ответ не HTML-страница
             if (strpos($response, '<!DOCTYPE') !== false || strpos($response, '<html') !== false) {
                 return [];
             }
 
+            // Убираем BOM маркер если присутствует
             if (substr($response, 0, 3) == "\xEF\xBB\xBF") {
                 $response = substr($response, 3);
             }
             
+            // Декодируем JSON
             $data = json_decode($response, true);
             
             if (json_last_error() !== JSON_ERROR_NONE) {
                 return [];
             }
             
+            // Возвращаем пакеты и кэшируем результат
             if (isset($data['packages'])) {
                 \Illuminate\Support\Facades\Cache::put($cacheKey, $data['packages'], $cacheTime);
                 return $data['packages'];
@@ -127,12 +181,39 @@ class Module
             
             return [];
             
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             return [];
         }
     }
-    
-    public function installRemotePackage(Request $request)
+
+    /**
+     * Обновление пакета
+     */
+    public function updateModule(Request $request): JsonResponse
+    {
+        $package = $request->input('package');
+
+        if (empty($package)) {
+            return response()->json([
+                'success' => false,
+                'error' => 'Имя пакета обязательно'
+            ]);
+        }
+
+        $result = $this->packageService->updatePackage($package);
+        return response()->json($result);
+    }
+
+    /**
+     * Установка пакета из удаленного репозитория
+     * 
+     * Проверяет наличие пакета в удаленном репозитории и устанавливает его
+     * с использованием сервиса управления пакетами.
+     * 
+     * @param Request $request HTTP-запрос содержащий имя пакета
+     * @return JsonResponse Результат установки со статусом успеха и выводом
+     */
+    public function installRemotePackage(Request $request): JsonResponse
     {
         $packageName = $request->input('package');
         
@@ -143,7 +224,7 @@ class Module
         if (!$packageInfo) {
             return response()->json([
                 'success' => false,
-                'error' => 'Package not found in repository'
+                'error' => 'Пакет не найден в репозитории'
             ]);
         }
         
@@ -153,7 +234,16 @@ class Module
         return response()->json($result);
     }
 
-    public function install(Request $request)
+    /**
+     * Установка пакета по имени и версии
+     * 
+     * Устанавливает пакет с использованием Composer с опциональным указанием версии.
+     * Проверяет имя пакета и возвращает результат установки.
+     * 
+     * @param Request $request HTTP-запрос содержащий имя пакета и версию
+     * @return JsonResponse Результат установки со статусом успеха и выводом
+     */
+    public function install(Request $request): JsonResponse
     {
         $package = $request->input('package');
         $version = $request->input('version', '*');
@@ -161,7 +251,7 @@ class Module
         if (empty($package)) {
             return response()->json([
                 'success' => false,
-                'error' => 'Package name is required'
+                'error' => 'Имя пакета обязательно'
             ]);
         }
 
@@ -170,9 +260,16 @@ class Module
     }
 
     /**
-     * Загрузка и установка модуля из архива
+     * Загрузка и установка модуля из архивного файла
+     * 
+     * Обрабатывает загрузку архивного файла, проверяет тип и размер файла,
+     * затем устанавливает модуль с использованием сервиса управления пакетами.
+     * 
+     * @param Request $request HTTP-запрос содержащий архивный файл
+     * @return JsonResponse Результат установки со статусом успеха и выводом
+     * @throws Exception Если обработка архива не удалась
      */
-    public function uploadModule(Request $request)
+    public function uploadModule(Request $request): JsonResponse
     {
         try {
             if (!$request->hasFile('archive')) {
@@ -193,7 +290,7 @@ class Module
                 ]);
             }
 
-            // Проверка размера (макс 50MB)
+            // Проверка размера (максимум 50MB)
             if ($file->getSize() > 50 * 1024 * 1024) {
                 return response()->json([
                     'success' => false,
@@ -204,7 +301,7 @@ class Module
             $result = $this->packageService->installFromArchive($file);
             return response()->json($result);
 
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             return response()->json([
                 'success' => false,
                 'error' => $e->getMessage()
@@ -212,14 +309,22 @@ class Module
         }
     }
 
-    public function remove(Request $request)
+    /**
+     * Удаление установленного пакета
+     * 
+     * Удаляет пакет через Composer и очищает связанные сервис-провайдеры и файлы.
+     * 
+     * @param Request $request HTTP-запрос содержащий имя пакета для удаления
+     * @return JsonResponse Результат удаления со статусом успеха и выводом
+     */
+    public function remove(Request $request): JsonResponse
     {
         $package = $request->input('package');
 
         if (empty($package)) {
             return response()->json([
                 'success' => false,
-                'error' => 'Package name is required'
+                'error' => 'Имя пакета обязательно'
             ]);
         }
 
@@ -227,14 +332,23 @@ class Module
         return response()->json($result);
     }
 
-    public function getPackageInfo(Request $request)
+    /**
+     * Получение детальной информации о пакете
+     * 
+     * Получает подробную информацию об установленном пакете включая описание,
+     * версию, провайдеры и конфигурацию автозагрузки.
+     * 
+     * @param Request $request HTTP-запрос содержащий имя пакета
+     * @return JsonResponse Информация о пакете или ошибка если пакет не найден
+     */
+    public function getPackageInfo(Request $request): JsonResponse
     {
         $package = $request->input('package');
         
         if (empty($package)) {
             return response()->json([
                 'success' => false,
-                'error' => 'Package name is required'
+                'error' => 'Имя пакета обязательно'
             ]);
         }
 

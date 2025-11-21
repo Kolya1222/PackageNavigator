@@ -31,6 +31,11 @@ class PackageManagerService
         set_time_limit(120);
         $result = $this->executeCommand($command, 120);
 
+        // Только если установка успешна - выполняем дополнительные действия
+        if ($result['success']) {
+            $this->runPostInstallActions($package);
+        }
+
         return $result;
     }
 
@@ -86,6 +91,11 @@ class PackageManagerService
             $command = "cd \"{$this->projectRoot}\" && composer update --no-interaction";
             $result = $this->executeCommand($command, 120);
 
+            // Только если установка успешна
+            if ($result['success']) {
+                $this->runPostInstallActions($packageName);
+            }
+
             // Очищаем временные файлы
             $this->removeDirectory($tempDir);
 
@@ -102,6 +112,50 @@ class PackageManagerService
                 $this->removeDirectory($tempDir);
             }
             throw $e;
+        }
+    }
+
+    /**
+     * Выполнение пост-установочных действий
+     */
+    protected function runPostInstallActions($package)
+    {
+        $packageInfo = $this->getPackageInfo($package);
+        if (!empty($packageInfo['providers'])) {
+            foreach ($packageInfo['providers'] as $provider) {
+                $this->publishPackageAssets($provider);
+            }
+        }
+        $this->runPackageMigrations();
+    }
+
+    /**
+     * Публикация ресурсов пакета
+     */
+    protected function publishPackageAssets($providerClass)
+    {
+        if (!class_exists($providerClass)) {
+            return;
+        }
+        $publishCommand = "cd \"{$this->projectRoot}\" && php artisan vendor:publish --provider=\"{$providerClass}\" --force";
+        $this->executeCommand($publishCommand);
+    }
+
+    /**
+     * Выполнение миграций пакета
+     */
+    protected function runPackageMigrations()
+    {
+        $checkCommand = "cd \"{$this->projectRoot}\" && php artisan migrate:status";
+        $statusResult = $this->executeCommand($checkCommand);
+
+        if (strpos($statusResult['output'] ?? '', 'Pending') !== false) {
+            $migrateCommand = "cd \"{$this->projectRoot}\" && php artisan migrate --force";
+            $result = $this->executeCommand($migrateCommand);
+            
+            if (!$result['success']) {
+                throw new \Exception("Migration failed: " . ($result['error'] ?? 'Unknown error'));
+            }
         }
     }
 
@@ -137,9 +191,7 @@ class PackageManagerService
      */
     protected function findComposerJson($directory)
     {
-        $iterator = new \RecursiveIteratorIterator(
-            new \RecursiveDirectoryIterator($directory)
-        );
+        $iterator = new \DirectoryIterator($directory);
         
         foreach ($iterator as $file) {
             if ($file->isFile() && $file->getFilename() === 'composer.json') {
@@ -219,6 +271,24 @@ class PackageManagerService
             $this->customComposerPath, 
             json_encode($composerData, JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT)
         );
+    }
+
+    /**
+     * Обновление пакета до последней версии
+     */
+    public function updatePackage($package)
+    {
+        $command = "cd \"{$this->projectRoot}\" && composer update {$package} --no-interaction";
+
+        set_time_limit(120);
+        $result = $this->executeCommand($command, 120);
+
+        // Выполняем пост-обновочные действия
+        if ($result['success']) {
+            $this->runPostInstallActions($package);
+        }
+
+        return $result;
     }
 
     /**

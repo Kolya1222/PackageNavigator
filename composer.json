@@ -1,5 +1,14 @@
 {
   "name": "roilafx/packagenavigator",
+  "description": "Package Navigator для Evolution CMS - Инструмент для управления и установки пакетов",
+  "type": "evolutioncms-module",
+  "keywords": [
+    "evolutioncms",
+    "package",
+    "composer",
+    "manager",
+    "module"
+  ],
   "require": {
 
   },
