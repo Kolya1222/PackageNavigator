@@ -237,15 +237,24 @@ class PackageManagerService
     }
 
     /**
-     * Поиск composer.json в директории
+     * Поиск composer.json в архиве
      */
     protected function findComposerJson($directory)
     {
+        $rootComposer = $directory . '/composer.json';
+        if (file_exists($rootComposer)) {
+            return $rootComposer;
+        }
+        
         $iterator = new \DirectoryIterator($directory);
         
         foreach ($iterator as $file) {
-            if ($file->isFile() && $file->getFilename() === 'composer.json') {
-                return $file->getPathname();
+            if ($file->isDir() && !$file->isDot()) {
+                $nestedComposer = $file->getPathname() . '/composer.json';
+                if (file_exists($nestedComposer)) {
+                    return $nestedComposer;
+                }
+                break;
             }
         }
         
