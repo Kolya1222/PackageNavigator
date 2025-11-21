@@ -121,12 +121,67 @@ class PackageManagerService
     protected function runPostInstallActions($package)
     {
         $packageInfo = $this->getPackageInfo($package);
+        $this->publishPackageProviders($package);
         if (!empty($packageInfo['providers'])) {
             foreach ($packageInfo['providers'] as $provider) {
                 $this->publishPackageAssets($provider);
             }
         }
         $this->runPackageMigrations();
+    }
+
+    /**
+     * Публикация сервис-провайдеров пакета
+     */
+    protected function publishPackageProviders($package)
+    {
+        $packageInfo = $this->getPackageInfo($package);
+        $published = [];
+        
+        // Создаем директорию providers если она не существует
+        if (!is_dir($this->providersConfigPath)) {
+            mkdir($this->providersConfigPath, 0755, true);
+        }
+        
+        if (!empty($packageInfo['providers'])) {
+            foreach ($packageInfo['providers'] as $provider) {
+                $providerFilename = $this->generateProviderFilename($provider);
+                $providerPath = $this->providersConfigPath . '/' . $providerFilename;
+                
+                // Проверяем, не существует ли уже такой файл
+                if (!file_exists($providerPath)) {
+                    $content = "<?php\n\nreturn " . $provider . "::class;";
+                    
+                    if (file_put_contents($providerPath, $content)) {
+                        $published[] = $providerFilename;
+                    }
+                } else {
+                    // Файл уже существует, считаем что провайдер уже опубликован
+                    $published[] = $providerFilename . ' (already exists)';
+                }
+            }
+        }
+        
+        return $published;
+    }
+
+    /**
+     * Генерирует имя файла для сервис-провайдера
+     */
+    protected function generateProviderFilename($providerClass)
+    {
+        // Извлекаем короткое имя класса
+        $className = class_basename($providerClass);
+        
+        // Заменяем обратные слеши и не-ASCII символы
+        $sanitized = preg_replace('/[^a-zA-Z0-9_]/', '_', $className);
+        
+        // Убеждаемся, что имя файла заканчивается на .php
+        if (!str_ends_with($sanitized, '.php')) {
+            $sanitized .= '.php';
+        }
+        
+        return $sanitized;
     }
 
     /**
@@ -148,14 +203,9 @@ class PackageManagerService
     {
         $checkCommand = "cd \"{$this->projectRoot}\" && php artisan migrate:status";
         $statusResult = $this->executeCommand($checkCommand);
-
-        if (strpos($statusResult['output'] ?? '', 'Pending') !== false) {
+        if (preg_match('/\|\s*No\s*\|/', $statusResult['output'] ?? '')) {
             $migrateCommand = "cd \"{$this->projectRoot}\" && php artisan migrate --force";
-            $result = $this->executeCommand($migrateCommand);
-            
-            if (!$result['success']) {
-                throw new \Exception("Migration failed: " . ($result['error'] ?? 'Unknown error'));
-            }
+            $this->executeCommand($migrateCommand);
         }
     }
 
